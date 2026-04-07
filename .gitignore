@@ -1,0 +1,18 @@
+.venv/
+.DS_Store
+__pycache__/
+*.pyc
+.env
+*.session
+*.session-journal
+exports/
+# Сохранённые данные пользователя (API ключи и т.д.)
+user_settings.json
+stats_base.json
+# Сессия Telegram
+session.session
+*.session
+# Сборка macOS .app
+build/
+dist/
+.venv/
