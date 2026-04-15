@@ -6,6 +6,9 @@ __pycache__/
 *.session
 *.session-journal
 exports/
+test/
+stat/
+collection_scope_history.json
 # Сохранённые данные пользователя (API ключи и т.д.)
 user_settings.json
 stats_base.json

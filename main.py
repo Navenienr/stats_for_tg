@@ -9,12 +9,27 @@ from auth.session_manager import ensure_authorized
 from collectors.advanced_stats_collector import collect_advanced_stats
 from collectors.channel_stats_collector import collect_channel_base_stats
 from collectors.post_stats_collector import collect_post_metrics
-from config import Config, load_config, save_config
+from config import Config, load_config, prompt_collection_scope, save_config
 from models.schemas import ChannelStatsResult, UnavailableMetric
+from reports.ascii_table_report import build_ascii_report
 from reports.summary_report import write_summary
 from storage.exporter import export_all, export_base_stats
 from telegram.channel_discovery import resolve_channel_by_username
 from telegram.client import create_client
+
+
+def _prompt_main_action() -> str:
+    while True:
+        print("\nWhat do you want to do?")
+        print("1. Collect channel statistics")
+        print("2. Reconfigure saved Telegram settings")
+        print("3. Exit")
+        value = input("Choose action [1-3, default 1]: ").strip()
+        if not value:
+            return "1"
+        if value in {"1", "2", "3"}:
+            return value
+        print("Please enter 1, 2 or 3.")
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,27 +44,58 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Save CLI overrides into user_settings.json for future runs.",
     )
-    parser.add_argument("--post-limit", type=int, help="Max posts per channel.")
+    parser.add_argument(
+        "--post-limit",
+        type=int,
+        help="Max posts per channel (0 = all posts in date range).",
+    )
     parser.add_argument("--channel", type=str, help="Target channel username, e.g. @example.")
     parser.add_argument("--date-from", type=str, help="Start date in YYYY-MM-DD format.")
     parser.add_argument("--date-to", type=str, help="End date in YYYY-MM-DD format.")
     parser.add_argument("--output-dir", type=str, help="Directory for exports.")
     parser.add_argument(
+        "--no-ascii-table",
+        action="store_true",
+        help="Disable ASCII table report in terminal output.",
+    )
+    parser.add_argument(
+        "--ascii-top-posts",
+        type=int,
+        default=10,
+        help="How many posts to show in ASCII top table (default: 10).",
+    )
+    parser.add_argument(
         "--base-stats-file",
         type=str,
         help="Path to persistent base stats JSON file.",
+    )
+    parser.add_argument(
+        "--no-menu",
+        action="store_true",
+        help="Disable beginner menu and run directly.",
     )
     return parser.parse_args()
 
 
 async def run() -> None:
     args = parse_args()
+    if not args.no_menu:
+        action = _prompt_main_action()
+        if action == "2":
+            args.reconfigure = True
+        elif action == "3":
+            print("Bye.")
+            return
+
     config = load_config(reconfigure=args.reconfigure)
 
-    if args.post_limit:
-        if args.post_limit <= 0:
-            raise ValueError("--post-limit must be positive.")
+    if args.post_limit is not None:
+        if args.post_limit < 0:
+            raise ValueError("--post-limit must be greater than or equal to 0.")
         config.post_limit = args.post_limit
+    else:
+        # By default collect all posts inside selected period.
+        config.post_limit = 0
     if args.channel:
         config.channel_username = args.channel
     if args.date_from:
@@ -60,7 +106,10 @@ async def run() -> None:
         config.output_dir = Path(args.output_dir)
     if args.base_stats_file:
         config.base_stats_file = Path(args.base_stats_file)
+    if args.ascii_top_posts < 0:
+        raise ValueError("--ascii-top-posts must be greater than or equal to 0.")
     config = Config.from_dict(config.to_dict())
+    config = prompt_collection_scope(config)
 
     logging.basicConfig(
         level=getattr(logging, config.log_level, logging.INFO),
@@ -124,6 +173,9 @@ async def run() -> None:
         log.info("- %s: %s", name, path)
     log.info("- summary: %s", summary_path)
     log.info("- base_stats: %s", base_path)
+
+    if not args.no_ascii_table:
+        print(build_ascii_report(results, top_posts_limit=args.ascii_top_posts))
 
     if args.save_settings:
         save_config(config)

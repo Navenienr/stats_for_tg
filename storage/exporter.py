@@ -43,10 +43,19 @@ def export_channels_csv(results: list[ChannelStatsResult], output_dir: Path) -> 
                 "is_megagroup",
                 "participants_count",
                 "can_view_stats",
+                "posts_count",
+                "total_views",
+                "total_reposts",
+                "total_comments",
+                "total_reactions",
             ],
         )
         writer.writeheader()
         for channel in results:
+            total_views = sum(post.views or 0 for post in channel.post_metrics)
+            total_reposts = sum(post.forwards or 0 for post in channel.post_metrics)
+            total_comments = sum(post.replies for post in channel.post_metrics)
+            total_reactions = sum(post.reactions_total for post in channel.post_metrics)
             writer.writerow(
                 {
                     "channel_id": channel.channel_id,
@@ -55,6 +64,11 @@ def export_channels_csv(results: list[ChannelStatsResult], output_dir: Path) -> 
                     "is_megagroup": channel.is_megagroup,
                     "participants_count": channel.participants_count,
                     "can_view_stats": channel.can_view_stats,
+                    "posts_count": len(channel.post_metrics),
+                    "total_views": total_views,
+                    "total_reposts": total_reposts,
+                    "total_comments": total_comments,
+                    "total_reactions": total_reactions,
                 }
             )
     return target
